@@ -15,4 +15,8 @@ export class TenantService {
   async getTenant(tenantId: string): Promise<Tenant | null> {
     return this.db.getTenant(tenantId);
   }
+
+  async deleteTenant(id: string): Promise<void> {
+    return this.db.deleteTenant(id);
+  }
 }

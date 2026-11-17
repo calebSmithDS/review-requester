@@ -17,4 +17,7 @@ export interface DatabaseAdapter {
   getRecentCustomerLogs(customerId: string): Promise<ReviewLog[]>;
   createReviewLog(data: Omit<ReviewLog, 'id'>): Promise<ReviewLog>;
   updateReviewLog(id: string, data: Partial<ReviewLog>): Promise<void>;
+
+  // Demo Sandbox Cleanup
+  deleteTenant(id: string): Promise<void>;
 }

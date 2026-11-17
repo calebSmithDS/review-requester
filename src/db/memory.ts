@@ -92,4 +92,21 @@ export class MemoryDatabaseAdapter implements DatabaseAdapter {
       Object.assign(log, data);
     }
   }
+
+  async deleteTenant(id: string): Promise<void> {
+    this.tenants.delete(id);
+    // Delete logs and customers belonging to this tenant
+    for (const [logId, log] of this.reviewLogs.entries()) {
+      if (log.tenantId === id) {
+        this.reviewLogs.delete(logId);
+        this.jobIndex.delete(`${log.tenantId}:${log.jobReferenceId}`);
+      }
+    }
+    for (const [key, cust] of this.customers.entries()) {
+      if (cust.tenantId === id) {
+        this.customers.delete(key);
+        this.customersById.delete(cust.id);
+      }
+    }
+  }
 }

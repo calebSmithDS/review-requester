@@ -53,6 +53,10 @@ export class ReviewService {
     return this.tenantService.createTenant(data);
   }
 
+  async deleteTenant(id: string): Promise<void> {
+    return this.tenantService.deleteTenant(id);
+  }
+
   async getCustomer(tenantId: string, phoneNumber: string): Promise<Customer | null> {
     return this.customerService.getCustomer(tenantId, phoneNumber);
   }

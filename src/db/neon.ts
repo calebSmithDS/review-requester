@@ -230,4 +230,11 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
       .set(updateValues)
       .where(eq(schema.reviewLogs.id, id));
   }
+
+  async deleteTenant(id: string): Promise<void> {
+    // Delete in cascade order: reviewLogs -> customers -> tenant
+    await this.db.delete(schema.reviewLogs).where(eq(schema.reviewLogs.tenantId, id));
+    await this.db.delete(schema.customers).where(eq(schema.customers.tenantId, id));
+    await this.db.delete(schema.tenants).where(eq(schema.tenants.id, id));
+  }
 }
