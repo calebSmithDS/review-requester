@@ -26,13 +26,16 @@ export class IngressService {
     customerFirstName?: string;
     traceId?: string;
   }): Promise<{ status?: string; reviewRequestId?: string; ignored?: boolean; reason?: string }> {
-    const tenant = await this.db.getTenant(params.tenantId);
+    // 1. Parallelize initial Tenant and Job check (saves 1 round-trip)
+    const [tenant, existingLog] = await Promise.all([
+      this.db.getTenant(params.tenantId),
+      this.db.getReviewLogByJob(params.tenantId, params.jobReferenceId),
+    ]);
+
     if (!tenant) {
       throw new Error(`Tenant ${params.tenantId} not found`);
     }
 
-    // 1. Idempotency check: jobReferenceId
-    const existingLog = await this.db.getReviewLogByJob(params.tenantId, params.jobReferenceId);
     if (existingLog) {
       return { ignored: true, reason: 'idempotent_duplicate' };
     }
@@ -44,9 +47,9 @@ export class IngressService {
       params.customerFirstName
     );
 
-    // 3. Evaluate eligibility via policy rules
-    const history = await this.db.getRecentCustomerLogs(customer.id);
-    const eligibility = evaluateCustomerEligibility(customer, history);
+    // 3. Fast O(1) eligibility check (only fetches latest sent log, not full history)
+    const lastSentLog = await this.db.getLastSentCustomerLog(customer.id);
+    const eligibility = evaluateCustomerEligibility(customer, lastSentLog);
     if (!eligibility.allowed) {
       return { ignored: true, reason: eligibility.reason };
     }
@@ -54,14 +57,23 @@ export class IngressService {
     // 4. Calculate Dispatch Time with DND
     const scheduledDispatchAt = calculateDispatchTime(new Date());
 
-    // 5. Create review_logs record with status 'queued'
-    const reviewLog = await this.db.createReviewLog({
-      tenantId: params.tenantId,
-      customerId: customer.id,
-      jobReferenceId: params.jobReferenceId,
-      status: 'queued',
-      scheduledDispatchAt,
-    });
+    // 5. Create review_logs record with status 'queued' (atomic catch for concurrent bursts)
+    let reviewLog;
+    try {
+      reviewLog = await this.db.createReviewLog({
+        tenantId: params.tenantId,
+        customerId: customer.id,
+        jobReferenceId: params.jobReferenceId,
+        status: 'queued',
+        scheduledDispatchAt,
+      });
+    } catch (err: any) {
+      // Postgres unique_violation code is '23505' or matching duplicate key message
+      if (err.code === '23505' || err.message?.includes('duplicate') || err.message?.includes('unique')) {
+        return { ignored: true, reason: 'idempotent_duplicate' };
+      }
+      throw err;
+    }
 
     // 6. Push to Upstash QStash if enabled
     if (this.qstash) {

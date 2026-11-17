@@ -1,16 +1,29 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { ReviewService } from '../../services/index.ts';
+import { QStashSignatureVerifier } from '../middleware/qstash.ts';
 
 export interface DispatchRouteOpts {
   service: ReviewService;
+  verifier?: QStashSignatureVerifier;
 }
 
 export async function dispatchRoutes(app: FastifyInstance, opts: DispatchRouteOpts): Promise<void> {
-  const { service } = opts;
+  const { service, verifier } = opts;
+
+  const authPreHandler = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (verifier) {
+      const allowed = await verifier.verify(req, reply);
+      if (!allowed) {
+        // Reply status and error already sent by verifier
+        return;
+      }
+    }
+  };
 
   // POST /api/internal/dispatch
   app.post(
     '/internal/dispatch',
+    { preHandler: authPreHandler },
     async (req: FastifyRequest<{ Body: { review_log_id: string } }>, reply: FastifyReply) => {
       const { review_log_id } = req.body || {};
       if (!review_log_id) {
@@ -25,6 +38,7 @@ export async function dispatchRoutes(app: FastifyInstance, opts: DispatchRouteOp
   // POST /api/internal/dispatch-nudge
   app.post(
     '/internal/dispatch-nudge',
+    { preHandler: authPreHandler },
     async (req: FastifyRequest<{ Body: { review_log_id: string } }>, reply: FastifyReply) => {
       const { review_log_id } = req.body || {};
       if (!review_log_id) {

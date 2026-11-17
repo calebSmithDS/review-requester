@@ -26,6 +26,7 @@ async function runLocalSimulation() {
   const ingressRes = await app.inject({
     method: 'POST',
     url: `/api/webhooks/ingress/${tenant.id}`,
+    headers: { 'x-webhook-secret': tenant.webhookSecret },
     payload: {
       job_reference_id: 'JOB-SIM-001',
       customer_phone: '+61412345678',
@@ -40,6 +41,7 @@ async function runLocalSimulation() {
   const dupRes = await app.inject({
     method: 'POST',
     url: `/api/webhooks/ingress/${tenant.id}`,
+    headers: { 'x-webhook-secret': tenant.webhookSecret },
     payload: {
       job_reference_id: 'JOB-SIM-001',
       customer_phone: '+61412345678',
@@ -83,6 +85,7 @@ async function runLocalSimulation() {
   const lockoutRes = await app.inject({
     method: 'POST',
     url: `/api/webhooks/ingress/${tenant.id}`,
+    headers: { 'x-webhook-secret': tenant.webhookSecret },
     payload: {
       job_reference_id: 'JOB-SIM-002',
       customer_phone: '+61412345678',
@@ -97,6 +100,7 @@ async function runLocalSimulation() {
   const bobIngress = await app.inject({
     method: 'POST',
     url: `/api/webhooks/ingress/${tenant.id}`,
+    headers: { 'x-webhook-secret': tenant.webhookSecret },
     payload: {
       job_reference_id: 'JOB-BOB-001',
       customer_phone: '+61499887766',
@@ -106,8 +110,9 @@ async function runLocalSimulation() {
   const bobData = JSON.parse(bobIngress.body);
   const bobCustomer = await service.getCustomer(tenant.id, '+61499887766');
 
+  // Simulate user opening opt-out page and clicking confirm button
   const optOutRes = await app.inject({
-    method: 'GET',
+    method: 'POST',
     url: `/opt-out/${bobCustomer!.id}`,
   });
   console.log(`   HTTP ${optOutRes.statusCode} -> Opted out! (Body snippet: "${optOutRes.body.slice(0, 45)}...")`);

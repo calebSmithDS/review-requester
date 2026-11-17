@@ -79,6 +79,13 @@ export class MemoryDatabaseAdapter implements DatabaseAdapter {
     return Array.from(this.reviewLogs.values()).filter((l) => l.customerId === customerId);
   }
 
+  async getLastSentCustomerLog(customerId: string): Promise<ReviewLog | null> {
+    const logs = Array.from(this.reviewLogs.values())
+      .filter((l) => l.customerId === customerId && l.sentAt)
+      .sort((a, b) => b.sentAt!.getTime() - a.sentAt!.getTime());
+    return logs[0] || null;
+  }
+
   async createReviewLog(data: Omit<ReviewLog, 'id'>): Promise<ReviewLog> {
     const id = genId('rev');
     const log: ReviewLog = { id, ...data };
@@ -92,6 +99,22 @@ export class MemoryDatabaseAdapter implements DatabaseAdapter {
     if (log) {
       Object.assign(log, data);
     }
+  }
+
+  async claimNudgeDispatch(id: string): Promise<boolean> {
+    const log = this.reviewLogs.get(id);
+    if (!log) return false;
+    const customer = this.customersById.get(log.customerId);
+    if (!customer) return false;
+
+    // Check conditions atomically before claiming
+    if (customer.opted_out || customer.clicked_review_link || log.status === 'clicked' || log.status === 'nudge_sent') {
+      return false;
+    }
+
+    log.status = 'nudge_sent';
+    log.nudgeSentAt = new Date();
+    return true;
   }
 
   async deleteTenant(id: string): Promise<void> {

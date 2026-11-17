@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core';
 
 export const tenants = pgTable('tenants', {
   id: text('id').primaryKey(),
@@ -15,31 +15,44 @@ export const tenants = pgTable('tenants', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-export const customers = pgTable('customers', {
-  id: text('id').primaryKey(),
-  tenantId: text('tenant_id').references(() => tenants.id).notNull(),
-  phoneNumber: text('phone_number').notNull(),
-  firstName: text('first_name'),
-  optedOut: boolean('opted_out').default(false).notNull(),
-  clickedReviewLink: boolean('clicked_review_link').default(false).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+export const customers = pgTable(
+  'customers',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').references(() => tenants.id).notNull(),
+    phoneNumber: text('phone_number').notNull(),
+    firstName: text('first_name'),
+    optedOut: boolean('opted_out').default(false).notNull(),
+    clickedReviewLink: boolean('clicked_review_link').default(false).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('customers_tenant_phone_unique').on(table.tenantId, table.phoneNumber),
+  ]
+);
 
 export const reviewStatusEnum = ['queued', 'sent', 'clicked', 'nudge_sent'] as const;
 
-export const reviewLogs = pgTable('review_logs', {
-  id: text('id').primaryKey(),
-  tenantId: text('tenant_id').references(() => tenants.id).notNull(),
-  customerId: text('customer_id').references(() => customers.id).notNull(),
-  jobReferenceId: text('job_reference_id').notNull().unique(),
-  status: text('status', { enum: reviewStatusEnum }).notNull().default('queued'),
-  scheduledDispatchAt: timestamp('scheduled_dispatch_at').notNull(),
-  sentAt: timestamp('sent_at'),
-  nudgeScheduledAt: timestamp('nudge_scheduled_at'),
-  nudgeSentAt: timestamp('nudge_sent_at'),
-  clickedAt: timestamp('clicked_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+export const reviewLogs = pgTable(
+  'review_logs',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id').references(() => tenants.id).notNull(),
+    customerId: text('customer_id').references(() => customers.id).notNull(),
+    jobReferenceId: text('job_reference_id').notNull().unique(),
+    status: text('status', { enum: reviewStatusEnum }).notNull().default('queued'),
+    scheduledDispatchAt: timestamp('scheduled_dispatch_at').notNull(),
+    sentAt: timestamp('sent_at'),
+    nudgeScheduledAt: timestamp('nudge_scheduled_at'),
+    nudgeSentAt: timestamp('nudge_sent_at'),
+    clickedAt: timestamp('clicked_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('review_logs_customer_sent_idx').on(table.customerId, table.sentAt),
+    index('review_logs_tenant_job_idx').on(table.tenantId, table.jobReferenceId),
+  ]
+);
 
 export type DbTenant = typeof tenants.$inferSelect;
 export type InsertTenant = typeof tenants.$inferInsert;

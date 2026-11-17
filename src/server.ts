@@ -4,6 +4,7 @@ import { ReviewService } from './services/index.ts';
 import { NeonDatabaseAdapter } from './db/neon.ts';
 import { MemoryDatabaseAdapter } from './db/memory.ts';
 import { DevSmsProvider } from './api/routes/dev.ts';
+import { QStashSignatureVerifier } from './api/middleware/qstash.ts';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -14,6 +15,14 @@ const db = process.env.DATABASE_URL
 
 const smsProvider = process.env.TWILIO_AUTH_TOKEN ? undefined : new DevSmsProvider();
 
+const verifier =
+  process.env.QSTASH_CURRENT_SIGNING_KEY && process.env.QSTASH_NEXT_SIGNING_KEY
+    ? new QStashSignatureVerifier({
+        currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY,
+        nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY,
+      })
+    : undefined;
+
 const service = new ReviewService({
   db,
   smsProvider,
@@ -23,6 +32,7 @@ const service = new ReviewService({
 const app = buildApp({
   service,
   baseUrl: process.env.BASE_URL || `http://localhost:${PORT}`,
+  verifier,
 });
 
 async function start() {

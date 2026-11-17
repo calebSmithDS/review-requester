@@ -15,8 +15,10 @@ export interface DatabaseAdapter {
   getReviewLog(id: string): Promise<ReviewLog | null>;
   getReviewLogByJob(tenantId: string, jobReferenceId: string): Promise<ReviewLog | null>;
   getRecentCustomerLogs(customerId: string): Promise<ReviewLog[]>;
+  getLastSentCustomerLog(customerId: string): Promise<ReviewLog | null>;
   createReviewLog(data: Omit<ReviewLog, 'id'>): Promise<ReviewLog>;
   updateReviewLog(id: string, data: Partial<ReviewLog>): Promise<void>;
+  claimNudgeDispatch(id: string): Promise<boolean>;
 
   // Demo Sandbox Cleanup
   deleteTenant(id: string): Promise<void>;

@@ -3,7 +3,7 @@ import { Pool } from '@neondatabase/serverless';
 import * as schema from './schema.ts';
 import type { DatabaseAdapter } from './adapter.ts';
 import type { Tenant, Customer, ReviewLog } from '../types.ts';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull, isNotNull, sql } from 'drizzle-orm';
 import { genId } from '../utils/id.ts';
 
 export class NeonDatabaseAdapter implements DatabaseAdapter {
@@ -71,18 +71,6 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
     phoneNumber: string,
     firstName?: string | null
   ): Promise<Customer> {
-    const existing = await this.getCustomer(tenantId, phoneNumber);
-    if (existing) {
-      if (firstName && firstName !== existing.firstName) {
-        await this.db
-          .update(schema.customers)
-          .set({ firstName })
-          .where(eq(schema.customers.id, existing.id));
-        existing.firstName = firstName;
-      }
-      return existing;
-    }
-
     const id = genId('cus');
     const rows = await this.db
       .insert(schema.customers)
@@ -93,6 +81,12 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
         firstName: firstName || null,
         optedOut: false,
         clickedReviewLink: false,
+      })
+      .onConflictDoUpdate({
+        target: [schema.customers.tenantId, schema.customers.phoneNumber],
+        set: {
+          ...(firstName ? { firstName } : {}),
+        },
       })
       .returning();
 
@@ -194,6 +188,35 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
     }));
   }
 
+  async getLastSentCustomerLog(customerId: string): Promise<ReviewLog | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.reviewLogs)
+      .where(
+        and(
+          eq(schema.reviewLogs.customerId, customerId),
+          isNotNull(schema.reviewLogs.sentAt)
+        )
+      )
+      .orderBy(desc(schema.reviewLogs.sentAt))
+      .limit(1);
+
+    if (!rows.length) return null;
+    const r = rows[0];
+    return {
+      id: r.id,
+      tenantId: r.tenantId,
+      customerId: r.customerId,
+      jobReferenceId: r.jobReferenceId,
+      status: r.status as ReviewLog['status'],
+      scheduledDispatchAt: r.scheduledDispatchAt,
+      sentAt: r.sentAt,
+      nudgeScheduledAt: r.nudgeScheduledAt,
+      nudgeSentAt: r.nudgeSentAt,
+      clickedAt: r.clickedAt,
+    };
+  }
+
   async createReviewLog(data: Omit<ReviewLog, 'id'>): Promise<ReviewLog> {
     const id = genId('rev');
     const rows = await this.db
@@ -235,6 +258,30 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
       .update(schema.reviewLogs)
       .set(updateValues)
       .where(eq(schema.reviewLogs.id, id));
+  }
+
+  /**
+   * Atomically claims a nudge dispatch slot.
+   * Ensures status is 'sent' and clicked_at is NULL at the exact millisecond of update.
+   * Returns true if successfully claimed, false if already clicked or already sent.
+   */
+  async claimNudgeDispatch(id: string): Promise<boolean> {
+    const rows = await this.db
+      .update(schema.reviewLogs)
+      .set({
+        status: 'nudge_sent',
+        nudgeSentAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.reviewLogs.id, id),
+          eq(schema.reviewLogs.status, 'sent'),
+          isNull(schema.reviewLogs.clickedAt)
+        )
+      )
+      .returning({ id: schema.reviewLogs.id });
+
+    return rows.length > 0;
   }
 
   async deleteTenant(id: string): Promise<void> {

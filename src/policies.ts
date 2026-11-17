@@ -14,7 +14,7 @@ export type PolicyCheckResult =
  */
 export function evaluateCustomerEligibility(
   customer: Customer,
-  customerHistory: ReviewLog[],
+  lastSentLog: ReviewLog | null | ReviewLog[],
   now: number = Date.now()
 ): PolicyCheckResult {
   if (customer.opted_out) {
@@ -25,8 +25,15 @@ export function evaluateCustomerEligibility(
     return { allowed: false, reason: 'lifetime_lockout' };
   }
 
-  for (const log of customerHistory) {
-    if (log.sentAt && now - log.sentAt.getTime() < CONFIG.cooldown_period_ms) {
+  // Handle either single latest ReviewLog or array of logs (for backwards compatibility)
+  if (Array.isArray(lastSentLog)) {
+    for (const log of lastSentLog) {
+      if (log.sentAt && now - log.sentAt.getTime() < CONFIG.cooldown_period_ms) {
+        return { allowed: false, reason: 'cooldown' };
+      }
+    }
+  } else if (lastSentLog?.sentAt) {
+    if (now - lastSentLog.sentAt.getTime() < CONFIG.cooldown_period_ms) {
       return { allowed: false, reason: 'cooldown' };
     }
   }

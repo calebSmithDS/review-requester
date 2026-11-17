@@ -118,6 +118,12 @@ export class DispatchService {
       return { aborted: true, reason: 'idempotent_duplicate' };
     }
 
+    // Atomic claim: if the customer clicked or another worker fired in the last few ms, claim fails
+    const claimed = await this.db.claimNudgeDispatch(reviewLogId);
+    if (!claimed) {
+      return { aborted: true, reason: 'already_engaged' };
+    }
+
     // 1. Construct links
     const reviewLink = `${this.baseUrl}/r/${reviewLogId}`;
     const optOutLink = `${this.baseUrl}/opt-out/${customer.id}`;
@@ -137,15 +143,9 @@ export class DispatchService {
       body,
     });
 
-    const nudgeSentAt = new Date();
-    await this.db.updateReviewLog(reviewLogId, {
-      status: 'nudge_sent',
-      nudgeSentAt,
-    });
-
     return {
       status: 'nudge_sent',
-      nudge_sent_at: nudgeSentAt,
+      nudge_sent_at: new Date(),
       messageSid,
     };
   }
