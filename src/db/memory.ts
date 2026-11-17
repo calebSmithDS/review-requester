@@ -1,5 +1,6 @@
 import type { Tenant, Customer, ReviewLog } from '../types.ts';
 import type { DatabaseAdapter } from './adapter.ts';
+import { genId } from '../utils/id.ts';
 
 export class MemoryDatabaseAdapter implements DatabaseAdapter {
   private tenants = new Map<string, Tenant>();
@@ -13,7 +14,7 @@ export class MemoryDatabaseAdapter implements DatabaseAdapter {
   }
 
   async createTenant(data: Omit<Tenant, 'id' | 'createdAt'>): Promise<Tenant> {
-    const id = `tenant_${Math.random().toString(36).slice(2, 9)}`;
+    const id = genId('ten');
     const tenant: Tenant = {
       id,
       ...data,
@@ -36,7 +37,7 @@ export class MemoryDatabaseAdapter implements DatabaseAdapter {
     let customer = this.customers.get(key);
     if (!customer) {
       customer = {
-        id: `cust_${Math.random().toString(36).slice(2, 9)}`,
+        id: genId('cus'),
         tenantId,
         phoneNumber,
         firstName: firstName || null,
@@ -79,7 +80,7 @@ export class MemoryDatabaseAdapter implements DatabaseAdapter {
   }
 
   async createReviewLog(data: Omit<ReviewLog, 'id'>): Promise<ReviewLog> {
-    const id = `log_${Math.random().toString(36).slice(2, 9)}`;
+    const id = genId('rev');
     const log: ReviewLog = { id, ...data };
     this.reviewLogs.set(id, log);
     this.jobIndex.set(`${data.tenantId}:${data.jobReferenceId}`, id);

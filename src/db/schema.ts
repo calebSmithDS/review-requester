@@ -1,7 +1,7 @@
-import { pgTable, uuid, text, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, timestamp } from 'drizzle-orm/pg-core';
 
 export const tenants = pgTable('tenants', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: text('id').primaryKey(),
   businessName: text('business_name').notNull(),
   twilioSenderId: text('twilio_sender_id').notNull(),
   googleReviewUrl: text('google_review_url').notNull(),
@@ -16,8 +16,8 @@ export const tenants = pgTable('tenants', {
 });
 
 export const customers = pgTable('customers', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  tenantId: uuid('tenant_id').references(() => tenants.id).notNull(),
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').references(() => tenants.id).notNull(),
   phoneNumber: text('phone_number').notNull(),
   firstName: text('first_name'),
   optedOut: boolean('opted_out').default(false).notNull(),
@@ -28,9 +28,9 @@ export const customers = pgTable('customers', {
 export const reviewStatusEnum = ['queued', 'sent', 'clicked', 'nudge_sent'] as const;
 
 export const reviewLogs = pgTable('review_logs', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  tenantId: uuid('tenant_id').references(() => tenants.id).notNull(),
-  customerId: uuid('customer_id').references(() => customers.id).notNull(),
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').references(() => tenants.id).notNull(),
+  customerId: text('customer_id').references(() => customers.id).notNull(),
   jobReferenceId: text('job_reference_id').notNull().unique(),
   status: text('status', { enum: reviewStatusEnum }).notNull().default('queued'),
   scheduledDispatchAt: timestamp('scheduled_dispatch_at').notNull(),

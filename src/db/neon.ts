@@ -4,6 +4,7 @@ import * as schema from './schema.ts';
 import type { DatabaseAdapter } from './adapter.ts';
 import type { Tenant, Customer, ReviewLog } from '../types.ts';
 import { eq, and, desc } from 'drizzle-orm';
+import { genId } from '../utils/id.ts';
 
 export class NeonDatabaseAdapter implements DatabaseAdapter {
   private db: ReturnType<typeof drizzle<typeof schema>>;
@@ -30,7 +31,8 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
   }
 
   async createTenant(data: Omit<Tenant, 'id' | 'createdAt'>): Promise<Tenant> {
-    const rows = await this.db.insert(schema.tenants).values(data).returning();
+    const id = genId('ten');
+    const rows = await this.db.insert(schema.tenants).values({ id, ...data }).returning();
     const t = rows[0];
     return {
       id: t.id,
@@ -81,9 +83,11 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
       return existing;
     }
 
+    const id = genId('cus');
     const rows = await this.db
       .insert(schema.customers)
       .values({
+        id,
         tenantId,
         phoneNumber,
         firstName: firstName || null,
@@ -191,9 +195,11 @@ export class NeonDatabaseAdapter implements DatabaseAdapter {
   }
 
   async createReviewLog(data: Omit<ReviewLog, 'id'>): Promise<ReviewLog> {
+    const id = genId('rev');
     const rows = await this.db
       .insert(schema.reviewLogs)
       .values({
+        id,
         tenantId: data.tenantId,
         customerId: data.customerId,
         jobReferenceId: data.jobReferenceId,
