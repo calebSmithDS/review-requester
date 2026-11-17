@@ -1,0 +1,178 @@
+-- allium: 3
+-- review-requester.allium
+
+-- Scope: Multi-tenant review request dispatching and tracking micro-service
+-- Includes: Tenants, Customers, ReviewRequests, DND scheduling, Cooldowns, Lifetime lockout, Opt-outs, Nudges, CTR tracking
+
+config {
+    dispatch_delay: Duration = 2.hours
+    nudge_delay: Duration = 3.days
+    cooldown_period: Duration = 90.days
+    dnd_start_hour: Integer = 20
+    dnd_end_hour: Integer = 8
+    morning_dispatch_hour: Integer = 8
+    morning_dispatch_minute: Integer = 30
+}
+
+entity Tenant {
+    business_name: String
+    twilio_sender_id: String
+    google_review_url: String
+    message_template: String
+    nudge_template: String
+    webhook_secret: String
+}
+
+entity Customer {
+    tenant: Tenant
+    phone_number: String
+    first_name: String?
+    opted_out: Boolean
+    clicked_review_link: Boolean
+
+    review_requests: ReviewRequest with customer = this
+    recent_requests: review_requests where sent_at != null and sent_at > now - config.cooldown_period
+    is_in_cooldown: recent_requests.count > 0
+    is_locked_out: clicked_review_link or opted_out or is_in_cooldown
+}
+
+entity ReviewRequest {
+    tenant: Tenant
+    customer: Customer
+    job_reference_id: String
+    status: queued | sent | clicked | nudge_sent
+    scheduled_dispatch_at: Timestamp
+    sent_at: Timestamp?
+    nudge_scheduled_at: Timestamp?
+    nudge_sent_at: Timestamp?
+    clicked_at: Timestamp?
+
+    transitions status {
+        queued -> sent
+        sent -> clicked
+        sent -> nudge_sent
+        nudge_sent -> clicked
+        terminal: clicked, nudge_sent
+    }
+}
+
+-- Actors
+
+actor ExternalSystem {
+    identified_by: Tenant
+}
+
+actor Scheduler {
+    identified_by: Tenant
+}
+
+-- Rules
+
+rule HandleJobIngressExistingCustomer {
+    when: IngressJobCompleted(caller, tenant, job_reference_id, customer_phone, customer_first_name)
+    requires: exists Customer with tenant = tenant and phone_number = customer_phone
+    requires: not exists ReviewRequest with job_reference_id = job_reference_id
+    let customer = (Customer with tenant = tenant and phone_number = customer_phone).first
+    requires: not customer.is_locked_out
+    ensures:
+        ReviewRequest.created(
+            tenant: tenant,
+            customer: customer,
+            job_reference_id: job_reference_id,
+            status: queued,
+            scheduled_dispatch_at: now + config.dispatch_delay
+        )
+}
+
+rule HandleJobIngressNewCustomer {
+    when: IngressJobCompleted(caller, tenant, job_reference_id, customer_phone, customer_first_name)
+    requires: not exists Customer with tenant = tenant and phone_number = customer_phone
+    requires: not exists ReviewRequest with job_reference_id = job_reference_id
+    ensures:
+        let customer = Customer.created(
+            tenant: tenant,
+            phone_number: customer_phone,
+            first_name: customer_first_name,
+            opted_out: false,
+            clicked_review_link: false
+        )
+        ReviewRequest.created(
+            tenant: tenant,
+            customer: customer,
+            job_reference_id: job_reference_id,
+            status: queued,
+            scheduled_dispatch_at: now + config.dispatch_delay
+        )
+}
+
+rule DispatchInitialSms {
+    when: DispatchInitialRequest(scheduler, request)
+    requires: request.status = queued
+    requires: not request.customer.opted_out
+    requires: not request.customer.clicked_review_link
+    ensures:
+        request.status = sent
+        request.sent_at = now
+        request.nudge_scheduled_at = now + config.nudge_delay
+}
+
+rule DispatchNudgeSms {
+    when: DispatchNudgeRequest(scheduler, request)
+    requires: request.status = sent
+    requires: not request.customer.opted_out
+    requires: not request.customer.clicked_review_link
+    ensures:
+        request.status = nudge_sent
+        request.nudge_sent_at = now
+}
+
+rule CustomerOptOutRule {
+    when: CustomerOptsOut(customer)
+    requires: not customer.opted_out
+    ensures:
+        customer.opted_out = true
+}
+
+rule CustomerClickRule {
+    when: CustomerClicksReviewLink(request)
+    requires: request.status in {sent, nudge_sent}
+    ensures:
+        request.status = clicked
+        request.clicked_at = now
+        request.customer.clicked_review_link = true
+}
+
+-- Surfaces
+
+surface IngressSurface {
+    facing caller: ExternalSystem
+
+    context tenant: Tenant
+
+    provides:
+        IngressJobCompleted(caller, tenant, job_reference_id, customer_phone, customer_first_name)
+}
+
+surface DispatchExecutionSurface {
+    facing scheduler: Scheduler
+
+    context request: ReviewRequest
+
+    provides:
+        DispatchInitialRequest(scheduler, request)
+            when request.status = queued and not request.customer.opted_out
+        DispatchNudgeRequest(scheduler, request)
+            when request.status = sent and not request.customer.opted_out and not request.customer.clicked_review_link
+}
+
+surface PublicLinkSurface {
+    facing recipient: Customer
+
+    context request: ReviewRequest
+
+    provides:
+        CustomerClicksReviewLink(request)
+            when request.status in {sent, nudge_sent}
+        CustomerOptsOut(recipient)
+            when not recipient.opted_out
+}
