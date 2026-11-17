@@ -5,11 +5,27 @@
   "description": "Multi-tenant Review Requester microservice",
   "main": "dist/index.js",
   "scripts": {
-    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+    "dev": "node --experimental-strip-types src/server.ts",
+    "test": "node --experimental-strip-types --test test/**/*.test.ts",
+    "test:flow": "node --experimental-strip-types scripts/test-local-flow.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
-  "dependencies": {},
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "@types/node": "^22.10.1"
+    "@types/node": "^22.20.5",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@fastify/env": "^7.0.1",
+    "@neondatabase/serverless": "^1.2.1",
+    "@upstash/qstash": "^2.12.2",
+    "dotenv": "^18.0.10",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "twilio": "^6.3.0"
   }
 }

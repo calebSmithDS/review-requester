@@ -126,8 +126,8 @@ describe('Allium Spec Obligations: Review Requester', () => {
         customerPhone: '+61400000002',
         customerFirstName: 'Charlie'
       });
-      // Simulate sent 10 days ago
-      await service.markSent(first.reviewRequestId, new Date(Date.now() - 10 * 24 * 60 * 60 * 1000));
+      assert.ok(first.reviewRequestId);
+      await service.markSent(first.reviewRequestId!, new Date(Date.now() - 10 * 24 * 60 * 60 * 1000));
 
       // Attempt new job ingress for same customer
       const second = await service.handleIngress({
@@ -157,8 +157,9 @@ describe('Allium Spec Obligations: Review Requester', () => {
         customerPhone: '+61400000003',
         customerFirstName: 'David'
       });
-      await service.markSent(first.reviewRequestId, new Date());
-      await service.handleCustomerClick(first.reviewRequestId);
+      assert.ok(first.reviewRequestId);
+      await service.markSent(first.reviewRequestId!, new Date());
+      await service.handleCustomerClick(first.reviewRequestId!);
 
       // Attempt new job ingress
       const nextJob = await service.handleIngress({
@@ -190,10 +191,12 @@ describe('Allium Spec Obligations: Review Requester', () => {
       });
 
       const customer = await service.getCustomer(tenant.id, '+61400000004');
-      await service.handleOptOut(customer.id);
+      assert.ok(customer);
+      await service.handleOptOut(customer!.id);
 
       // Try sending dispatch
-      const dispatchRes = await service.dispatchInitial(first.reviewRequestId);
+      assert.ok(first.reviewRequestId);
+      const dispatchRes = await service.dispatchInitial(first.reviewRequestId!);
       assert.equal(dispatchRes.aborted, true);
       assert.equal(dispatchRes.reason, 'opted_out');
     });
@@ -216,12 +219,13 @@ describe('Allium Spec Obligations: Review Requester', () => {
         customerFirstName: 'Frank'
       });
 
-      const dispatch = await service.dispatchInitial(ingress.reviewRequestId);
+      assert.ok(ingress.reviewRequestId);
+      const dispatch = await service.dispatchInitial(ingress.reviewRequestId!);
       assert.equal(dispatch.status, 'sent');
       assert.ok(dispatch.sent_at);
       assert.ok(dispatch.nudge_scheduled_at);
 
-      const nudge = await service.dispatchNudge(ingress.reviewRequestId);
+      const nudge = await service.dispatchNudge(ingress.reviewRequestId!);
       assert.equal(nudge.status, 'nudge_sent');
       assert.ok(nudge.nudge_sent_at);
     });
@@ -243,17 +247,19 @@ describe('Allium Spec Obligations: Review Requester', () => {
         customerPhone: '+61400000006',
         customerFirstName: 'Grace'
       });
-      await service.dispatchInitial(ingress.reviewRequestId);
+      assert.ok(ingress.reviewRequestId);
+      await service.dispatchInitial(ingress.reviewRequestId!);
 
-      const clickResult = await service.handleCustomerClick(ingress.reviewRequestId);
+      const clickResult = await service.handleCustomerClick(ingress.reviewRequestId!);
       assert.equal(clickResult.status, 'clicked');
       assert.equal(clickResult.redirectUrl, 'https://g.page/ace/review');
 
       const customer = await service.getCustomer(tenant.id, '+61400000006');
-      assert.equal(customer.clicked_review_link, true);
+      assert.ok(customer);
+      assert.equal(customer!.clicked_review_link, true);
 
       // Subsequent nudge must abort because status is 'clicked'
-      const nudgeRes = await service.dispatchNudge(ingress.reviewRequestId);
+      const nudgeRes = await service.dispatchNudge(ingress.reviewRequestId!);
       assert.equal(nudgeRes.aborted, true);
       assert.equal(nudgeRes.reason, 'already_engaged');
     });
